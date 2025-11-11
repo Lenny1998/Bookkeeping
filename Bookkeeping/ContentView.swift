@@ -12,6 +12,7 @@ private struct Record: Identifiable {
     let amount: Double
     let category: String
     let createdAt: Date
+    let note: String
 }
 
 struct ContentView: View {
@@ -19,6 +20,8 @@ struct ContentView: View {
     @State private var selectedCategory = "餐饮"
     @State private var records: [Record] = []
     @State private var showInputError = false
+    @State private var noteText = ""
+    @State private var selectedDate = Date()
 
     private let categories = ["餐饮", "交通", "购物", "娱乐", "其他"]
     private let currencyFormatter: NumberFormatter = {
@@ -27,19 +30,47 @@ struct ContentView: View {
         formatter.currencyCode = Locale.current.currency?.identifier ?? "CNY"
         return formatter
     }()
+    private var allowedDateRange: ClosedRange<Date> {
+        let today = Date()
+        let tenDaysAgo = Calendar.current.date(byAdding: .day, value: -10, to: today) ?? today
+        return tenDaysAgo...today
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
+            VStack(spacing: 5) {
                 Form {
-                    Section(header: Text("输入金额")) {
-                        TextField("例如：45.50", text: $amountText)
-                            .keyboardType(.decimalPad)
-                        if showInputError {
-                            Text("请输入有效金额")
-                                .font(.footnote)
-                                .foregroundStyle(.red)
+                    Section {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 12) {
+                                Text("输入金额")
+                                    .frame(width: 70, alignment: .leading)
+                                TextField("例如：45.50", text: $amountText)
+                                    .keyboardType(.decimalPad)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+
+                            if showInputError {
+                                Text("请输入有效金额")
+                                    .font(.footnote)
+                                    .foregroundStyle(.red)
+                            }
+
+                            HStack(spacing: 12) {
+                                Text("备注")
+                                    .frame(width: 70, alignment: .leading)
+                                TextField("可选：例如 午餐", text: $noteText)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+
+                            HStack(spacing: 12) {
+                                Text("日期")
+                                    .frame(width: 70, alignment: .leading)
+                                DatePicker("", selection: $selectedDate, in: allowedDateRange, displayedComponents: .date)
+                                    .labelsHidden()
+                            }
                         }
+                        .padding(.vertical, 4)
                     }
 
                     Section(header: Text("选择类型")) {
@@ -50,14 +81,17 @@ struct ContentView: View {
                         }
                         .pickerStyle(.segmented)
                     }
-
-                    Button(action: saveRecord) {
-                        Label("保存记账", systemImage: "tray.and.arrow.down")
-                    }
                 }
                 .scrollContentBackground(.hidden)
                 .background(Color(.secondarySystemGroupedBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
+
+                Button(action: saveRecord) {
+                    Label("保存记账", systemImage: "tray.and.arrow.down")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
                 .padding(.horizontal)
 
                 if records.isEmpty {
@@ -71,6 +105,11 @@ struct ContentView: View {
                                 Text(record.createdAt, style: .date)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                if !record.note.isEmpty {
+                                    Text(record.note)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                             Spacer()
                             Text(currencyFormatter.string(from: record.amount as NSNumber) ?? "\(record.amount)")
@@ -80,8 +119,7 @@ struct ContentView: View {
                     .listStyle(.insetGrouped)
                 }
             }
-            .padding(.top)
-            .navigationTitle("简单记账")
+            .padding(.top, 0)
         }
     }
 
@@ -90,9 +128,12 @@ struct ContentView: View {
             showInputError = true
             return
         }
-        let newRecord = Record(amount: amount, category: selectedCategory, createdAt: Date())
+        let trimmedNote = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newRecord = Record(amount: amount, category: selectedCategory, createdAt: selectedDate, note: trimmedNote)
         records.insert(newRecord, at: 0)
         amountText = ""
+        noteText = ""
+        selectedDate = Date()
         showInputError = false
     }
 }
