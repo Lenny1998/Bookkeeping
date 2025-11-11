@@ -8,11 +8,19 @@
 import SwiftUI
 
 private struct Record: Identifiable {
-    let id = UUID()
+    let id: UUID
     let amount: Double
     let category: String
     let createdAt: Date
     let note: String
+
+    init(id: UUID = UUID(), amount: Double, category: String, createdAt: Date, note: String) {
+        self.id = id
+        self.amount = amount
+        self.category = category
+        self.createdAt = createdAt
+        self.note = note
+    }
 }
 
 struct ContentView: View {
@@ -22,6 +30,7 @@ struct ContentView: View {
     @State private var showInputError = false
     @State private var noteText = ""
     @State private var selectedDate = Date()
+    @State private var editingRecordID: UUID?
 
     private let categories = ["餐饮", "交通", "购物", "娱乐", "其他"]
     private let currencyFormatter: NumberFormatter = {
@@ -89,33 +98,50 @@ struct ContentView: View {
                     .padding(.horizontal)
 
                     Button(action: saveRecord) {
-                        Label("保存记账", systemImage: "tray.and.arrow.down")
+                        Label(editingRecordID == nil ? "保存记账" : "更新记录",
+                              systemImage: editingRecordID == nil ? "tray.and.arrow.down" : "square.and.pencil")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .padding(.horizontal)
+                    if editingRecordID != nil {
+                        Button("取消编辑", role: .cancel, action: resetForm)
+                            .padding(.horizontal)
+                    }
 
                     if records.isEmpty {
                         ContentUnavailableView("暂无记录", systemImage: "tray", description: Text("添加一笔记账开始统计你的支出。"))
                     } else {
-                        List(records) { record in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(record.category)
-                                        .font(.headline)
-                                    Text(record.createdAt, style: .date)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    if !record.note.isEmpty {
-                                        Text(record.note)
-                                            .font(.subheadline)
+                        List {
+                            ForEach(records) { record in
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(record.category)
+                                            .font(.headline)
+                                        Text(record.createdAt, style: .date)
+                                            .font(.caption)
                                             .foregroundStyle(.secondary)
+                                        if !record.note.isEmpty {
+                                            Text(record.note)
+                                                .font(.subheadline)
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
+                                    Spacer()
+                                    Text(currencyFormatter.string(from: record.amount as NSNumber) ?? "\(record.amount)")
+                                        .fontWeight(.semibold)
                                 }
-                                Spacer()
-                                Text(currencyFormatter.string(from: record.amount as NSNumber) ?? "\(record.amount)")
-                                    .fontWeight(.semibold)
+                                .swipeActions(edge: .trailing) {
+                                    Button("删除", role: .destructive) {
+                                        deleteRecord(record)
+                                    }
+                                    Button("编辑") {
+                                        startEditing(record)
+                                    }
+                                    .tint(.blue)
+                                }
                             }
+                            .onDelete(perform: deleteRecords)
                         }
                         .listStyle(.insetGrouped)
                     }
@@ -139,12 +165,58 @@ struct ContentView: View {
             return
         }
         let trimmedNote = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let newRecord = Record(amount: amount, category: selectedCategory, createdAt: selectedDate, note: trimmedNote)
-        records.insert(newRecord, at: 0)
+        let recordDate = selectedDate
+
+        if let editingID = editingRecordID,
+           let index = records.firstIndex(where: { $0.id == editingID }) {
+            records[index] = Record(id: editingID,
+                                    amount: amount,
+                                    category: selectedCategory,
+                                    createdAt: recordDate,
+                                    note: trimmedNote)
+        } else {
+            let newRecord = Record(amount: amount,
+                                   category: selectedCategory,
+                                   createdAt: recordDate,
+                                   note: trimmedNote)
+            records.insert(newRecord, at: 0)
+        }
+
+        resetForm()
+    }
+
+    private func startEditing(_ record: Record) {
+        editingRecordID = record.id
+        amountText = record.amount.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(record.amount))" : "\(record.amount)"
+        selectedCategory = record.category
+        noteText = record.note
+        selectedDate = record.createdAt
+        showInputError = false
+    }
+
+    private func deleteRecord(_ record: Record) {
+        records.removeAll { $0.id == record.id }
+        if editingRecordID == record.id {
+            resetForm()
+        }
+    }
+
+    private func deleteRecords(at offsets: IndexSet) {
+        for index in offsets {
+            if records.indices.contains(index),
+               records[index].id == editingRecordID {
+                resetForm()
+            }
+        }
+        records.remove(atOffsets: offsets)
+    }
+
+    private func resetForm() {
         amountText = ""
         noteText = ""
         selectedDate = Date()
         showInputError = false
+        editingRecordID = nil
     }
 }
 
